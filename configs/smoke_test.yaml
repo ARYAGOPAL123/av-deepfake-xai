@@ -1,0 +1,54 @@
+# ---------------- Experiment configuration ----------------
+seed: 42
+device: cpu             # cuda | cpu
+experiment: smoke_test
+
+data:
+  manifest: data/manifests/dummy.csv
+  cache_dir: data/cache/dummy
+  n_frames: 1
+  fps: 25
+  image_size: 32
+  sample_rate: 16000
+  max_audio_sec: 0.125    # short synthetic clip for CPU smoke testing
+  n_mels: 80
+  num_workers: 0
+
+model:
+  mode: audio_only        # smoke integration uses the lightweight CPU path
+  visual_backbone: mobilenetv3_small_050
+  visual_pretrained: false
+  freeze_visual_blocks: 4
+  audio_backbone: cnn   # or facebook/wav2vec2-xls-r-300m, or "cnn" (log-Mel CNN, offline)
+  freeze_audio_ssl: true
+  d_model: 64
+  heads: 4
+  dropout: 0.3
+  evidential: false       # true -> Dirichlet evidential head
+
+train:
+  epochs: 1
+  batch_size: 24
+  lr: 2.0e-4
+  weight_decay: 1.0e-2
+  focal_gamma: 2.0
+  balanced_sampler: true
+  grad_clip: 1.0
+  kl_anneal_epochs: 10    # evidential only
+  amp: false
+
+uncertainty:
+  method: mc_dropout      # mc_dropout | evidential | softmax
+  mc_passes: 5
+  tau: 0.85               # confidence threshold (tuned by calibrate.py)
+  u_max: 0.5              # uncertainty threshold (tuned by calibrate.py)
+
+explain:
+  shap_bands: 8
+  shap_segments: 10
+  shap_nsamples: 300
+
+paths:
+  checkpoint: checkpoints/best.pt
+  results_dir: results
+  db: db/audit.sqlite

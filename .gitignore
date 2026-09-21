@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+data/raw/*
+data/cache/*
+!data/**/.gitkeep
+mlruns/
+db/*.sqlite

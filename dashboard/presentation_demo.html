@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AVDF | Presentation Demo</title>
+  <style>
+    :root { --ink:#16202e; --muted:#5e6b7e; --paper:#f4f0e7; --panel:#fffdf8; --line:#d9d2c4; --teal:#1d5fbf; --coral:#d94d3f; --gold:#d79b35; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:radial-gradient(circle at 15% 10%, #fff8e6 0 18%, transparent 42%), linear-gradient(135deg,#f4f0e7,#e7eef9); font:15px Georgia, serif; }
+    main { max-width:1180px; margin:0 auto; padding:32px 24px 56px; }
+    header { display:flex; justify-content:space-between; gap:24px; align-items:flex-start; margin-bottom:28px; }
+    h1,h2,h3,p { margin-top:0; } h1 { font-size:clamp(2rem,5vw,4.4rem); line-height:.94; max-width:650px; margin-bottom:14px; letter-spacing:0; }
+    h2 { font-size:1.5rem; } h3 { font-size:1rem; text-transform:uppercase; letter-spacing:.08em; font-family:Arial,sans-serif; }
+    .eyebrow { color:var(--teal); text-transform:uppercase; letter-spacing:.16em; font:700 12px Arial,sans-serif; }
+    .notice { max-width:360px; padding:16px; border-left:4px solid var(--coral); background:#fff8ed; font:700 13px Arial,sans-serif; line-height:1.45; }
+    .grid { display:grid; grid-template-columns:minmax(280px,.8fr) minmax(0,1.2fr); gap:18px; }
+    section { background:var(--panel); border:1px solid var(--line); padding:22px; box-shadow:0 8px 24px #2d3e5c12; }
+    .controls { display:grid; gap:12px; } button, .file { border:1px solid var(--ink); background:var(--ink); color:white; padding:12px 14px; cursor:pointer; font:700 13px Arial,sans-serif; text-align:left; }
+    button:hover, .file:hover { background:var(--teal); } input[type=file] { display:none; }
+    .sample { background:transparent; color:var(--ink); border-color:var(--line); } .sample:hover { color:white; border-color:var(--teal); }
+    .file { display:block; background:var(--teal); border-color:var(--teal); } .small { color:var(--muted); font:13px/1.5 Arial,sans-serif; }
+    .result { min-height:420px; } .empty { color:var(--muted); padding:50px 8px; text-align:center; }
+    .verdict { display:flex; justify-content:space-between; align-items:end; border-bottom:1px solid var(--line); padding-bottom:18px; margin-bottom:18px; }
+    .verdict strong { font-size:3.4rem; line-height:.9; } .fake { color:var(--coral); } .real { color:var(--teal); } .review { color:var(--gold); }
+    .metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:18px 0; } .metric { background:#f4f0e7; padding:14px; } .metric b { display:block; font-size:1.55rem; margin-top:5px; }
+    .evidence { display:grid; grid-template-columns:1fr 1fr; gap:12px; } .viz { border:1px solid var(--line); background:#152033; min-height:170px; position:relative; overflow:hidden; } .viz canvas { width:100%; height:100%; display:block; }
+    .viz span { position:absolute; top:10px; left:10px; color:white; font:11px Arial,sans-serif; background:#16202ecc; padding:5px 7px; }
+    .log { margin-top:18px; font:12px/1.5 Consolas,monospace; color:var(--muted); background:#f4f0e7; padding:12px; white-space:pre-wrap; }
+    @media (max-width:760px) { header,.grid { display:block; } .notice { margin-top:18px; } section { margin-top:16px; } .evidence { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><div class="eyebrow">AVDF / analyst rehearsal</div><h1>Audio-visual evidence, in one glance.</h1><p class="small">A presentation-safe walkthrough of verdicts, uncertainty routing, explanations, review, and audit output.</p></div>
+    <div class="notice">DEMO MODE<br><span style="font-weight:400">These deterministic fixtures are not predictions from a trained model and must not be used as dissertation metrics.</span></div>
+  </header>
+  <div class="grid">
+    <section>
+      <h2>Analyse a clip</h2>
+      <p class="small">Choose a labelled fixture for a reliable talk track, or upload any file to generate a deterministic UI response.</p>
+      <div class="controls">
+        <button class="sample" data-name="sample-real.mp4">Load real example</button>
+        <button class="sample" data-name="sample-fake.mp4">Load fake example</button>
+        <button class="sample" data-name="ambiguous-review.mp4">Load review example</button>
+        <label class="file">Upload a video<input id="upload" type="file" accept="video/*"></label>
+      </div>
+      <div class="log" id="log">Ready. Select an example to begin.</div>
+    </section>
+    <section class="result" id="result"><div class="empty">Your analysis result will appear here.<br><br>Start with the review example to demonstrate uncertainty routing.</div></section>
+  </div>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const log = $('log');
+  const fixtures = {
+    'sample-real.mp4': { verdict:'REAL', confidence:.94, uncertainty:.08, decision:'AUTO-ACCEPT', note:'Consistent facial and audio evidence' },
+    'sample-fake.mp4': { verdict:'FAKE', confidence:.91, uncertainty:.12, decision:'AUTO-ACCEPT', note:'Cross-modal mismatch detected' },
+    'ambiguous-review.mp4': { verdict:'FAKE', confidence:.62, uncertainty:.57, decision:'HUMAN REVIEW', note:'Low confidence / high uncertainty' }
+  };
+  async function hashName(name, size) { const data = new TextEncoder().encode(name + ':' + size); const hash = await crypto.subtle.digest('SHA-256', data); return [...new Uint8Array(hash)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
+  function draw(id, seed, mode) { const c=$(id), ctx=c.getContext('2d'), w=c.width=c.clientWidth*2, h=c.height=c.clientHeight*2; ctx.fillStyle='#152033'; ctx.fillRect(0,0,w,h); for(let y=0;y<h;y+=8) for(let x=0;x<w;x+=8) { const n=Math.sin((x+seed)*.021+(y-seed)*.017); const hot=mode==='audio' ? Math.sin(x*.025+seed)*.5+.5 : Math.max(0,n); ctx.fillStyle=`rgba(${mode==='audio'?217:210},${mode==='audio'?77:155},${mode==='audio'?63:53},${.10+hot*.7})`; ctx.fillRect(x,y,8,8); } ctx.strokeStyle='#fff'; ctx.lineWidth=3; ctx.strokeRect(w*.31,h*.2,w*.38,h*.55); }
+  async function analyse(name, size=0) { const fixture=fixtures[name] || fixtures['ambiguous-review.mp4']; const digest=await hashName(name,size); const seed=parseInt(digest.slice(0,6),16); const r={...fixture, file:name, sha256:digest, result_id:'demo-'+digest.slice(0,8), method:'deterministic-demo-fixture'}; $('result').innerHTML=`<div class="verdict"><div><div class="eyebrow">${r.file}</div><strong class="${r.verdict==='FAKE'?'fake':'real'}">${r.verdict}</strong></div><div class="${r.decision==='HUMAN REVIEW'?'review':''}"><b>${r.decision}</b><br><span class="small">${r.note}</span></div></div><div class="metrics"><div class="metric">Confidence<b>${(r.confidence*100).toFixed(1)}%</b></div><div class="metric">Uncertainty<b>${r.uncertainty.toFixed(3)}</b></div><div class="metric">Evidence<b>2 channels</b></div></div><div class="evidence"><div class="viz"><span>Visual evidence / Grad-CAM</span><canvas id="visual"></canvas></div><div class="viz"><span>Audio evidence / SHAP</span><canvas id="audio"></canvas></div></div><div class="log">${JSON.stringify(r,null,2)}</div>`; draw('visual',seed,'visual'); draw('audio',seed,'audio'); log.textContent=`Analysis complete\n${r.result_id}\n${r.decision}\nAudit event recorded (demo mode)`; }
+  document.querySelectorAll('.sample').forEach(b=>b.onclick=()=>analyse(b.dataset.name)); $('upload').onchange=e=>{const f=e.target.files[0]; if(f) analyse(f.name,f.size);};
+</script>
+</body>
+</html>

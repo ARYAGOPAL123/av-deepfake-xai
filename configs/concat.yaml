@@ -1,0 +1,54 @@
+# ---------------- Experiment configuration ----------------
+seed: 42
+device: cuda            # cuda | cpu
+experiment: concat
+
+data:
+  manifest: data/manifests/fakeavceleb.csv
+  cache_dir: data/cache/fakeavceleb
+  n_frames: 32
+  fps: 25
+  image_size: 224
+  sample_rate: 16000
+  max_audio_sec: 4.0      # audio cropped/padded to this length (aligned with sampled frames)
+  n_mels: 80
+  num_workers: 4
+
+model:
+  mode: concat            # fusion | concat | video_only | audio_only
+  visual_backbone: efficientnet_b0   # any timm name, e.g. vit_base_patch16_224
+  visual_pretrained: true
+  freeze_visual_blocks: 4
+  audio_backbone: microsoft/wavlm-base-plus   # or facebook/wav2vec2-xls-r-300m, or "cnn" (log-Mel CNN, offline)
+  freeze_audio_ssl: true
+  d_model: 512
+  heads: 8
+  dropout: 0.3
+  evidential: false       # true -> Dirichlet evidential head
+
+train:
+  epochs: 20
+  batch_size: 32
+  lr: 2.0e-4
+  weight_decay: 1.0e-2
+  focal_gamma: 2.0
+  balanced_sampler: true
+  grad_clip: 1.0
+  kl_anneal_epochs: 10    # evidential only
+  amp: true
+
+uncertainty:
+  method: mc_dropout      # mc_dropout | evidential | softmax
+  mc_passes: 30
+  tau: 0.85               # confidence threshold (tuned by calibrate.py)
+  u_max: 0.5              # uncertainty threshold (tuned by calibrate.py)
+
+explain:
+  shap_bands: 8
+  shap_segments: 10
+  shap_nsamples: 300
+
+paths:
+  checkpoint: checkpoints/best.pt
+  results_dir: results
+  db: db/audit.sqlite

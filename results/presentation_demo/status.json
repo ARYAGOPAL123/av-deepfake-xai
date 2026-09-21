@@ -1,0 +1,8 @@
+{
+  "mode": "presentation_demo",
+  "trained_model_available": false,
+  "real_dataset_available": false,
+  "real_metrics_available": false,
+  "warning": "Demonstration outputs are deterministic UI fixtures and must not be reported as trained-model results.",
+  "generated_at": "2026-09-21T12:33:08.276516+00:00"
+}
