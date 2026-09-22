@@ -7,9 +7,11 @@ src/avdf/db.py
 src/avdf/evaluate.py
 src/avdf/ingest.py
 src/avdf/losses.py
+src/avdf/media.py
 src/avdf/metrics.py
 src/avdf/pipeline.py
 src/avdf/preprocess.py
+src/avdf/report.py
 src/avdf/train.py
 src/avdf/utils.py
 src/avdf.egg-info/PKG-INFO
@@ -28,4 +30,6 @@ src/avdf/models/visual_encoder.py
 src/avdf/uncertainty/__init__.py
 src/avdf/uncertainty/mc_dropout.py
 src/avdf/uncertainty/routing.py
+tests/test_api.py
+tests/test_dfdc_ingest.py
 tests/test_smoke.py

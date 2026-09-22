@@ -3,6 +3,7 @@ import argparse
 import json
 import time
 from contextlib import nullcontext
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -22,9 +23,56 @@ except ImportError:  # optional
     mlflow = None
 
 
-def loaders(cfg):
+class EmbeddingDataset(torch.utils.data.Dataset):
+    def __init__(self, manifest, split, cache_dir, n_frames, sample_rate, max_audio_sec, embedding_dir):
+        self.base = AVDataset(manifest, split, cache_dir, n_frames, sample_rate, max_audio_sec)
+        self.embedding_dir = Path(embedding_dir)
+
+    def __len__(self):
+        return len(self.base)
+
+    def __getitem__(self, index):
+        _, _, y, cat, cid = self.base[index]
+        item = torch.load(self.embedding_dir / f"{cid}.pt", map_location="cpu", weights_only=True)
+        visual = item.get("visual", torch.empty(0))
+        audio = item.get("audio", torch.empty(0))
+        while visual.ndim > 2 and visual.shape[0] == 1:
+            visual = visual.squeeze(0)
+        while audio.ndim > 2 and audio.shape[0] == 1:
+            audio = audio.squeeze(0)
+        return visual.float(), audio.float(), y, cat, cid
+
+    def labels(self):
+        return self.base.labels()
+
+
+@torch.no_grad()
+def cache_embeddings(cfg, model, dev):
+    """Encode each cached clip once; frozen encoder outputs are stored as float16."""
     d = cfg.data
-    mk = lambda s: AVDataset(d.manifest, s, d.cache_dir, d.n_frames, d.sample_rate, d.max_audio_sec)
+    out = Path(d.cache_dir) / f"embeddings_d{cfg.model.d_model}"
+    out.mkdir(parents=True, exist_ok=True)
+    ds = AVDataset(d.manifest, None, d.cache_dir, d.n_frames, d.sample_rate, d.max_audio_sec)
+    for faces, wav, _, _, cids in tqdm(DataLoader(ds, batch_size=1, shuffle=False), desc="cache embeddings"):
+        target = out / f"{cids[0]}.pt"
+        item = torch.load(target, map_location="cpu", weights_only=True) if target.exists() else {}
+        need_visual = model.visual is not None and "visual" not in item
+        need_audio = model.audio is not None and "audio" not in item
+        if not need_visual and not need_audio:
+            continue
+        visual, audio = model.encode(faces.to(dev), wav.to(dev))
+        if need_visual and visual is not None:
+            item["visual"] = visual.cpu().half()
+        if need_audio and audio is not None:
+            item["audio"] = audio.cpu().half()
+        torch.save(item, target)
+    return out
+
+
+def loaders(cfg, model, dev):
+    d = cfg.data
+    embedding_dir = cache_embeddings(cfg, model, dev)
+    mk = lambda s: EmbeddingDataset(d.manifest, s, d.cache_dir, d.n_frames, d.sample_rate, d.max_audio_sec, embedding_dir)
     tr, va = mk("train"), mk("val")
     sampler = balanced_sampler(tr) if cfg.train.balanced_sampler else None
     dl_tr = DataLoader(tr, batch_size=cfg.train.batch_size, sampler=sampler, shuffle=sampler is None,
@@ -37,8 +85,10 @@ def loaders(cfg):
 def validate(model, dl, dev, evidential=False):
     model.eval()
     ys, ps = [], []
-    for faces, wav, y, *_ in dl:
-        logits, _ = model(faces.to(dev), wav.to(dev))
+    for visual, audio, y, *_ in dl:
+        visual = visual.to(dev) if visual.numel() else None
+        audio = audio.to(dev) if audio.numel() else None
+        logits, _ = model.fuse(visual, audio)
         p = evidential_probs(logits)[0] if evidential else logits.float().softmax(-1)
         ys.append(y.numpy()); ps.append(p[:, 1].cpu().numpy())
     return classification_metrics(np.concatenate(ys), np.concatenate(ps))
@@ -47,11 +97,20 @@ def validate(model, dl, dev, evidential=False):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="configs/default.yaml")
-    cfg = load_config(ap.parse_args().config)
+    ap.add_argument("--cache-only", action="store_true", help="build frozen embeddings and exit")
+    args = ap.parse_args()
+    cfg = load_config(args.config)
     seed_everything(cfg.seed)
     dev = get_device(cfg)
-    tr, dl_tr, dl_va = loaders(cfg)
     model = build_model(cfg).to(dev)
+    for encoder in (model.visual, model.audio):
+        if encoder is not None:
+            for parameter in encoder.parameters():
+                parameter.requires_grad = False
+    tr, dl_tr, dl_va = loaders(cfg, model, dev)
+    if args.cache_only:
+        print(f"cached embeddings -> {Path(cfg.data.cache_dir) / f'embeddings_d{cfg.model.d_model}'}")
+        return
     params = [p for p in model.parameters() if p.requires_grad]
     print(f"trainable params: {sum(p.numel() for p in params)/1e6:.2f}M | train clips: {len(tr)}")
     opt = torch.optim.AdamW(params, lr=cfg.train.lr, weight_decay=cfg.train.weight_decay)
@@ -71,10 +130,12 @@ def main():
         for epoch in range(cfg.train.epochs):
             model.train()
             t0, losses = time.time(), []
-            for faces, wav, y, *_ in tqdm(dl_tr, desc=f"epoch {epoch+1}/{cfg.train.epochs}"):
-                faces, wav, y = faces.to(dev, non_blocking=True), wav.to(dev, non_blocking=True), y.to(dev)
+            for visual, audio, y, *_ in tqdm(dl_tr, desc=f"epoch {epoch+1}/{cfg.train.epochs}"):
+                visual = visual.to(dev, non_blocking=True) if visual.numel() else None
+                audio = audio.to(dev, non_blocking=True) if audio.numel() else None
+                y = y.to(dev)
                 with torch.autocast("cuda", enabled=use_amp):
-                    logits, _ = model(faces, wav)
+                    logits, _ = model.fuse(visual, audio)
                 loss = edl_loss(logits, y, epoch, cfg.train.kl_anneal_epochs) if cfg.model.evidential else crit(logits, y)
                 opt.zero_grad(set_to_none=True)
                 scaler.scale(loss).backward()

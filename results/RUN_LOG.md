@@ -46,3 +46,19 @@
 | 2026-09-21 | `preprocess_clip("dataset/aassnaulhq.mp4", ...)` with 8 and 16 frames | Passed: faces detected 8/8 and 16/16, 10.0 s audio, 3.3 s / 4.0 s per clip on CPU, ~3 MB cache per clip. |
 | 2026-09-21 | Frozen EfficientNet-B0 video-only forward/backward + Grad-CAM (random init, no download) | Passed: 0.394M trainable params, backbone stays in eval mode, 1.4 s per batch of 4, Grad-CAM (8, 224, 224). |
 | 2026-09-21 | Download of EfficientNet-B0 / WavLM weights from Hugging Face in the assistant's session | Failed: TLS to `us.aws.cdn.hf.co` ends in an untrusted root in that session. `truststore` added so Python uses the Windows certificate store. |
+
+## DFDC sample run (2026-09-22)
+
+| Local time | Command / check | Outcome |
+|---|---|---|
+| 2026-09-22 | Raw metadata/file count for `data/raw/DFDC_data/deepfake-detection-challenge/train_sample_videos` and `test_videos` | Measured 400 train MP4, 400 demo test MP4, 400 metadata entries: 77 REAL and 323 FAKE; 323 FAKE entries have `original`. |
+| 2026-09-22 | Hardware check with PowerShell/CIM and Torch | Measured Intel i3-1115G4, 4 logical processors, 8,216,244,224 bytes RAM, 225,120,403,456 bytes free on C:, Torch CPU and no CUDA device. |
+| 2026-09-22 | `pip install -r requirements.txt`, `pip install -e .`, `pip install imageio-ffmpeg` in `.venv` | Completed; Torch 2.14.0+cpu and bundled ffmpeg available. |
+| 2026-09-22 | `python -m avdf.ingest --dataset dfdc --root data/raw/DFDC_data/deepfake-detection-challenge/train_sample_videos --out data/manifests/dfdc.csv --split` | Completed: 400 clips, 244 source groups; train 54 REAL/226 FAKE, val 12 REAL/49 FAKE, test 11 REAL/48 FAKE; zero source-group overlap; 265 referenced originals absent from the sample. |
+| 2026-09-22 | `python -m avdf.preprocess --manifest data/manifests/dfdc.csv --cache data/cache/dfdc_16f --n_frames 16 --image_size 224 --device cpu` | Resumable job active; progress is reported by the terminal and must complete before embedding/training. |
+| 2026-09-22 | API lazy pipeline load patch and `python -m py_compile api/main.py` | Passed; a checkpoint appearing after server startup will be loaded on the next live upload. |
+
+| 2026-09-22 | scripts/make_dfdc_fast_manifest.py | Completed: 400 complete cached clips; train 54 REAL/226 FAKE, val 11 REAL/48 FAKE, test 12 REAL/49 FAKE; zero group overlap. |
+| 2026-09-22 | python -m avdf.train --config configs/dfdc_fast.yaml | Started compact CPU fusion training: seed 42, 16 frames, batch 4, 1 epoch, no AMP. |
+
+| 2026-09-22 | python -m avdf.train --config configs/dfdc_fast.yaml | Failed during first attempt: cached embeddings retained batch dimension and attention received 4-D tensors. Fixed loader to squeeze single-item batch dimension; rerunning. |

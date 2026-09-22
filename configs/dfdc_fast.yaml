@@ -1,0 +1,56 @@
+# Fast CPU preliminary model for the currently cached DFDC sample.
+# Uses compact frozen encoders and one training epoch for a live submission demo.
+seed: 42
+device: cpu
+experiment: dfdc_fast
+
+data:
+  dataset: DFDC sample (fast preliminary)
+  manifest: data/manifests/dfdc_fast.csv
+  cache_dir: data/cache/dfdc_16f
+  n_frames: 16
+  fps: 25
+  image_size: 224
+  sample_rate: 16000
+  max_audio_sec: 4.0
+  n_mels: 80
+  num_workers: 0
+
+model:
+  mode: fusion
+  visual_backbone: mobilenetv3_small_050
+  visual_pretrained: false
+  freeze_visual_blocks: -1
+  audio_backbone: cnn
+  freeze_audio_ssl: true
+  d_model: 64
+  heads: 4
+  dropout: 0.3
+  evidential: false
+
+train:
+  epochs: 1
+  batch_size: 4
+  lr: 3.0e-4
+  weight_decay: 1.0e-2
+  focal_gamma: 2.0
+  balanced_sampler: true
+  grad_clip: 1.0
+  kl_anneal_epochs: 1
+  amp: false
+
+uncertainty:
+  method: mc_dropout
+  mc_passes: 30
+  tau: 0.85
+  u_max: 0.5
+
+explain:
+  shap_bands: 8
+  shap_segments: 10
+  shap_nsamples: 100
+
+paths:
+  checkpoint: checkpoints/best.pt
+  results_dir: results
+  db: db/audit.sqlite

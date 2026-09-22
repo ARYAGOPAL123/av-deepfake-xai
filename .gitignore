@@ -6,3 +6,9 @@ data/cache/*
 !data/**/.gitkeep
 mlruns/
 db/*.sqlite
+results/uploads/
+results/previews/
+results/analyses/
+results/reports/
+results/dfdc_fast_train.log*
+data/cache/dfdc_16f/

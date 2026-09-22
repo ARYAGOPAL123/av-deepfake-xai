@@ -116,11 +116,14 @@ class FaceExtractor:
         return torch.from_numpy(c).permute(2, 0, 1).float()
 
 
-def preprocess_clip(path, extractor, n_frames=32, fps=25, sr=16000):
+def preprocess_clip(path, extractor, n_frames=32, fps=25, sr=16000, progress=None):
+    progress = progress or (lambda stage: None)
     has_v, has_a = probe_streams(path)
     if not (has_v and has_a):
         raise ValueError(f"missing stream (video={has_v}, audio={has_a})")
+    progress("Extracting faces")
     faces = extractor.crop(path, n_frames, fps)
+    progress("Extracting audio")
     wav = trim_silence(extract_audio(path, sr), sr)
     return faces, wav
 

@@ -1,14 +1,13 @@
-# ---------------- DFDC small-subset config (CPU, frozen encoders) ----------------
-# Preliminary experiment on a handful of DFDC videos; not comparable to the full-dataset numbers.
+# Preliminary DFDC sample experiment. CPU-friendly settings with frozen encoders.
 seed: 42
-device: cpu             # cuda | cpu
-experiment: dfdc_audio_only
+device: cpu
+experiment: dfdc_evidential
 
 data:
-  dataset: DFDC (small preliminary subset)
+  dataset: DFDC sample (preliminary)
   manifest: data/manifests/dfdc.csv
   cache_dir: data/cache/dfdc_16f
-  n_frames: 16             # CPU setting; must match --n_frames used by preprocess
+  n_frames: 16
   fps: 25
   image_size: 224
   sample_rate: 16000
@@ -17,16 +16,16 @@ data:
   num_workers: 0
 
 model:
-  mode: audio_only            # fusion | concat | video_only | audio_only
+  mode: fusion
   visual_backbone: efficientnet_b0
   visual_pretrained: true
-  freeze_visual_blocks: -1                    # -1 = whole backbone frozen
+  freeze_visual_blocks: -1
   audio_backbone: microsoft/wavlm-base-plus
   freeze_audio_ssl: true
   d_model: 256
   heads: 4
   dropout: 0.3
-  evidential: false
+  evidential: true
 
 train:
   epochs: 5
@@ -40,8 +39,8 @@ train:
   amp: false
 
 uncertainty:
-  method: mc_dropout
-  mc_passes: 10
+  method: evidential
+  mc_passes: 30
   tau: 0.85
   u_max: 0.5
 

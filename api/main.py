@@ -146,7 +146,8 @@ def evidence_urls(result_id: Any, res: dict[str, Any]) -> dict[str, Any]:
     """Replace filesystem image paths with API URLs the browser can load."""
     out = dict(res)
     for kind in ("gradcam", "shap", "faces_preview"):
-        out[f"{kind}_url"] = f"/api/cases/{result_id}/evidence/{kind}" if res.get(kind) else None
+        source = res.get(kind) or res.get(f"{kind}_path")
+        out[f"{kind}_url"] = f"/api/cases/{result_id}/evidence/{kind}" if source else None
         out.pop(kind, None)
     return out
 
@@ -221,6 +222,13 @@ def process_upload(job_id: str, path: Path, explain: bool) -> None:
         if not ffmpeg_available():
             raise RuntimeError("ffmpeg is not available. Run `pip install imageio-ffmpeg` or install ffmpeg.")
         pipe = getattr(app.state, "pipeline", None)
+        if pipe is None and mode() == "LIVE MODE":
+            with PIPELINE_LOCK:
+                pipe = getattr(app.state, "pipeline", None)
+                if pipe is None:
+                    from avdf.pipeline import Pipeline
+                    pipe = Pipeline(CONFIG_FILE, checkpoint_path())
+                    app.state.pipeline = pipe
         if pipe is None:
             result = preprocess_only(job_id, path)
         else:
@@ -351,6 +359,18 @@ def job_evidence(job_id: str, kind: str):
     if not path or not Path(path).exists():
         raise HTTPException(404, "Evidence not found.")
     return FileResponse(path)
+
+
+@app.get("/api/cases/latest", tags=["cases"])
+def latest_case() -> dict[str, Any]:
+    """Return the newest persisted live case so the dashboard survives server restarts."""
+    rows = db().audit(limit=1)
+    if not rows:
+        raise HTTPException(404, "No completed live cases yet.")
+    result = case(int(rows[0]["result_id"]))
+    result.update(confidence=float(result["confidence_score"]), uncertainty=float(result["uncertainty_score"]),
+                  file=result["file_path"], mode=mode())
+    return result
 
 
 @app.get("/api/cases/{result_id}", tags=["cases"])
@@ -497,12 +517,15 @@ def _report_case(result_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/report/{result_id}.pdf", tags=["reports"])
-def report(result_id: str) -> Response:
+def report(result_id: str) -> FileResponse:
     from avdf.report import build_pdf
     c = cfg()
     pdf = build_pdf(_report_case(result_id), float(c.uncertainty.tau), float(c.uncertainty.u_max))
-    return Response(pdf, media_type="application/pdf",
-                    headers={"Content-Disposition": f"attachment; filename=avdf_report_{result_id}.pdf"})
+    report_dir = RESULTS / "reports"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_path = report_dir / f"avdf_report_{result_id}.pdf"
+    report_path.write_bytes(pdf)
+    return FileResponse(report_path, media_type="application/pdf", filename=report_path.name)
 
 
 @app.get("/api/report/{result_id}.json", tags=["reports"])

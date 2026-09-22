@@ -80,7 +80,15 @@ def _dfdc_meta(root: Path, meta_json: str = None) -> dict:
     mj = Path(meta_json) if meta_json else root / "metadata.json"
     if not mj.exists():
         raise SystemExit(f"DFDC metadata not found: {mj}. Put metadata.json next to the videos (see data/README.md)")
-    return json.load(open(mj))
+    with mj.open(encoding="utf-8") as f:
+        meta = json.load(f)
+    for name, item in meta.items():
+        label = str(item.get("label", "")).upper()
+        if label not in {"REAL", "FAKE"}:
+            raise ValueError(f"DFDC metadata entry {name!r} has invalid label {item.get('label')!r}")
+        if label == "FAKE" and not item.get("original"):
+            raise ValueError(f"DFDC FAKE entry {name!r} has no original video")
+    return meta
 
 
 def build_dfdc(root: Path, meta_json: str = None) -> pd.DataFrame:
@@ -95,7 +103,9 @@ def build_dfdc(root: Path, meta_json: str = None) -> pd.DataFrame:
         fake = it["label"].upper() == "FAKE"
         src = (it.get("original") or name) if fake else name
         rows.append(dict(clip_id=clip_id(f), path=str(f), label="fake" if fake else "real",
-                         category="FAKE" if fake else "REAL", subject=Path(src).stem, dataset="dfdc"))
+                         category="FAKE" if fake else "REAL", subject=Path(src).stem,
+                         original=str(src) if fake else "", original_present=(root / src).exists() if fake else True,
+                         dataset="dfdc"))
     return pd.DataFrame(rows)
 
 
@@ -179,6 +189,10 @@ if __name__ == "__main__":
     df["split"] = "test"
     if a.split:
         df = group_stratified_split(df) if a.dataset == "dfdc" else subject_disjoint_split(df)
+    if a.dataset == "dfdc":
+        missing = int((df.original_present == False).sum())
+        if missing:
+            print(f"WARNING: {missing} FAKE videos reference originals absent from this sample; they remain grouped by source ID.")
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(a.out, index=False)
     print(df.groupby(["split", "category"]).size().unstack(fill_value=0))

@@ -7,8 +7,8 @@ experiment: dfdc_video_only
 data:
   dataset: DFDC (small preliminary subset)
   manifest: data/manifests/dfdc.csv
-  cache_dir: data/cache/dfdc
-  n_frames: 8             # 8-16 on CPU; must match --n_frames used by preprocess (cache holds that many)
+  cache_dir: data/cache/dfdc_16f
+  n_frames: 16             # CPU setting; must match --n_frames used by preprocess
   fps: 25
   image_size: 224
   sample_rate: 16000

@@ -44,8 +44,7 @@ class Pipeline:
 
         step("Validating")
         sha = hashlib.sha256(Path(video_path).read_bytes()).hexdigest()
-        step("Extracting faces")
-        faces_u8, wav = preprocess_clip(video_path, self.extractor, d.n_frames, d.fps, d.sample_rate)
+        faces_u8, wav = preprocess_clip(video_path, self.extractor, d.n_frames, d.fps, d.sample_rate, progress=step)
         faces = normalise_faces(faces_u8)[None].to(self.dev)
         wav_t = normalise_wav(fix_length(wav, int(d.sample_rate * d.max_audio_sec)))[None].to(self.dev)
         lap("preprocess")
@@ -91,6 +90,10 @@ class Pipeline:
         if res["review"]:
             self.db.enqueue(rid)
         res["timings_sec"] = timings
+        res["completed_stages"] = ["Validating", "Extracting faces", "Extracting audio", "Inference", "Uncertainty"]
+        if self.explain:
+            res["completed_stages"].append("Explanations")
+        res["completed_stages"].append("Done")
         # full result next to the evidence images: fields the audit schema does not store (method, p_fake, ...)
         Path(f"{stem}_result.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
         return res
